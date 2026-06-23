@@ -1,0 +1,8 @@
+pandas
+numpy
+spacy
+scikit-learn
+nltk
+presidio-analyzer
+presidio-anonymizer
+pytest
