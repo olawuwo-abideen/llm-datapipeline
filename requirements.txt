@@ -6,3 +6,4 @@ nltk
 presidio-analyzer
 presidio-anonymizer
 pytest
+detoxify
