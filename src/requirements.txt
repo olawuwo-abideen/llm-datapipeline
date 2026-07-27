@@ -1,8 +1,9 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
 streamlit
-pandas
-numpy
-scikit-learn
-spacy
+numpy>=1.26,<2.0
+pandas>=2.0,<3.0
+scikit-learn>=1.4,<1.6
+spacy>=3.7.2,<3.8.0
 presidio-analyzer
 presidio-anonymizer
 detoxify
