@@ -1,9 +1,10 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+streamlit
 pandas
 numpy
-spacy
 scikit-learn
-nltk
+spacy>=3.7.2,<3.8.0
 presidio-analyzer
 presidio-anonymizer
-pytest
 detoxify
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
