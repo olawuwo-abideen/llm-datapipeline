@@ -1,27 +1,37 @@
 """Pipeline orchestrator.
 
-CORRECTED STAGE ORDERING
-------------------------
-The earlier version cleaned (lowercase + lemmatise) BEFORE PII and
-toxicity detection, which degraded both: Presidio needs capitalisation
-and sentence structure to find names/locations, and Detoxify was
-trained on natural sentences. The corrected order is:
-
+STAGE ORDERING
+--------------
     ingest -> validate -> PII anonymise -> toxicity/bias filter
            -> deduplicate -> clean/normalise -> format -> export
            -> metrics
 
-Deduplication runs after filtering (fewer rows to compare) but before
-cleaning, so near-duplicate detection sees the anonymised natural text.
+PII and toxicity detection run on the ORIGINAL text (Presidio and
+Detoxify rely on capitalisation and sentence structure); linguistic
+normalisation runs last. Deduplication runs after filtering (fewer rows
+to compare) but before cleaning, so near-duplicate detection sees the
+anonymised natural text.
 
-A command-line interface replaces the hardcoded paths and thresholds,
-satisfying the objective of a flexible, reusable framework:
+OUTPUT MODES
+------------
+    --mode instruction (default): Alpaca-style instruction/input/output
+        JSON for LLM fine-tuning -> processed_data.json
+    --mode mirror: output matches the input format (CSV in -> CSV out,
+        JSON in -> JSON out) -> processed_data.<input extension>.
+        Text is natural sentences by default in both modes; enable
+        --lemmatize / --remove-stopwords only for classical NLP use.
+        Only the text column is exported unless --keep-columns is set,
+        because metadata columns may carry unsanitised PII.
 
-    python main.py --input ../datasets/data.csv --output processed.json
-    python main.py --input data.csv --no-lemmatize --toxicity-threshold 0.7
+Examples:
+    python main.py --input data.csv
+    python main.py --input data.csv --mode mirror
+    python main.py --input data.csv --mode mirror --output clean.csv
+    python main.py --input data.json --toxicity-threshold 0.7 --lemmatize --remove-stopwords
 """
 
 import argparse
+from pathlib import Path
 
 from cleaner import Cleaner
 from config import PipelineConfig
@@ -42,8 +52,19 @@ def parse_args() -> PipelineConfig:
     )
     parser.add_argument("--input", default=defaults.input_path,
                         help="Input CSV or JSON file")
-    parser.add_argument("--output", default=defaults.output_path,
-                        help="Output JSON file for the formatted dataset")
+    parser.add_argument("--output", default=None,
+                        help="Output file. Defaults to processed_data.json "
+                             "(instruction mode) or processed_data.<input "
+                             "extension> (mirror mode)")
+    parser.add_argument("--mode", choices=["instruction", "mirror"],
+                        default="instruction",
+                        help="instruction: Alpaca-style JSON for fine-tuning. "
+                             "mirror: output matches the input format "
+                             "(CSV in -> CSV out) with sanitised text")
+    parser.add_argument("--keep-columns", action="store_true",
+                        help="Mirror mode only: keep all input columns, not "
+                             "just the sanitised text. WARNING: metadata "
+                             "columns may contain unsanitised PII")
     parser.add_argument("--metrics", default=defaults.metrics_path,
                         help="Output JSON file for the metrics report")
     parser.add_argument("--similarity-threshold", type=float,
@@ -54,22 +75,33 @@ def parse_args() -> PipelineConfig:
                         help="Detoxify score threshold for removal")
     parser.add_argument("--instruction", default=defaults.instruction_text,
                         help="Instruction text for the formatted records")
-    parser.add_argument("--no-lemmatize", action="store_true",
-                        help="Disable lemmatisation (keep natural sentences)")
-    parser.add_argument("--keep-stopwords", action="store_true",
-                        help="Disable stopword removal")
+    parser.add_argument("--lemmatize", action="store_true",
+                        help="Enable lemmatisation (opt-in; off by default "
+                             "so output keeps natural sentences)")
+    parser.add_argument("--remove-stopwords", action="store_true",
+                        help="Enable stopword removal (opt-in; off by default)")
     args = parser.parse_args()
 
-    return PipelineConfig(
+    if args.output:
+        output_path = args.output
+    elif args.mode == "mirror":
+        output_path = "processed_data" + Path(args.input).suffix.lower()
+    else:
+        output_path = "processed_data.json"
+
+    config = PipelineConfig(
         input_path=args.input,
-        output_path=args.output,
+        output_path=output_path,
         metrics_path=args.metrics,
         similarity_threshold=args.similarity_threshold,
         toxicity_threshold=args.toxicity_threshold,
         instruction_text=args.instruction,
-        lemmatize=not args.no_lemmatize,
-        remove_stopwords=not args.keep_stopwords,
+        lemmatize=args.lemmatize,
+        remove_stopwords=args.remove_stopwords,
     )
+    config.mode = args.mode
+    config.keep_columns = args.keep_columns
+    return config
 
 
 def run(config: PipelineConfig) -> None:
@@ -113,12 +145,17 @@ def run(config: PipelineConfig) -> None:
 
     after = df.copy()
 
-    # Stage 7: instruction formatting
-    formatted = formatter.format(df)
-
-    # Stage 8: export
-    saved_path = exporter.save(formatted, config.output_path)
-    print(f"Formatted dataset saved to: {saved_path}")
+    # Stage 7 + 8: format and export according to the selected mode
+    mode = getattr(config, "mode", "instruction")
+    if mode == "mirror":
+        saved_path = exporter.save_mirror(
+            df, config.output_path,
+            keep_columns=getattr(config, "keep_columns", False))
+        print(f"Sanitised dataset (mirror mode) saved to: {saved_path}")
+    else:
+        formatted = formatter.format(df)
+        saved_path = exporter.save_instruction(formatted, config.output_path)
+        print(f"Instruction dataset saved to: {saved_path}")
 
     # Stage 9: metrics
     metrics.generate(
