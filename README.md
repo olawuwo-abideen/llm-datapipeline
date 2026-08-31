@@ -14,7 +14,7 @@ A modular preprocessing pipeline that prepares text datasets for large language 
 
 **MSc project artefact.** Author: Abideen Olawuwo (Student ID 25043520), UWE Bristol, UFCF9Y-60-M CSCT Masters Project.
 
-**Live demo:** https://llm-datapipeline.streamlit.app/(reduced configuration, see Hosted vs local below)
+**Live demo:** https://llm-datapipeline.streamlit.app/ (reduced configuration, see Hosted vs local below)
 
 ## Pipeline order
 
@@ -32,6 +32,7 @@ Requires Python 3.11 (spaCy's compiled dependencies do not build on 3.13+; NumPy
 
 ```bash
 python3.11 -m venv venv && source venv/bin/activate
+cd src
 pip install -r requirements.txt
 python -m spacy download en_core_web_lg   # best name recognition (used automatically if present)
 ```
@@ -39,6 +40,8 @@ python -m spacy download en_core_web_lg   # best name recognition (used automati
 The small model `en_core_web_sm` installs via requirements.txt and is used as an automatic fallback on memory-constrained hosts.
 
 ## Usage
+
+All commands below are run from the `src/` directory.
 
 Command line:
 
@@ -108,6 +111,7 @@ src/
   metrics.py          Per-stage metrics and qualitative samples
   evaluate_pii.py     Ground-truth recall evaluator (BIO labels)
   requirements.txt
+datasets/              example and evaluation datasets
 ```
 
 ## Third-party libraries and attribution
